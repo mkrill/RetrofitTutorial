@@ -5,10 +5,21 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
 import android.widget.TextView;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import org.jetbrains.annotations.NotNull;
+
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
+import okhttp3.Interceptor;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.logging.HttpLoggingInterceptor;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -27,16 +38,43 @@ public class MainActivity extends AppCompatActivity {
 
         textViewResult = findViewById(R.id.text_view_result);
 
+        Gson gson = new GsonBuilder().serializeNulls().create();
+
+        HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
+        loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
+
+        OkHttpClient okHttpClient = new OkHttpClient.Builder()
+                .readTimeout(60, TimeUnit.SECONDS)
+                .connectTimeout(60, TimeUnit.SECONDS)
+                .addInterceptor(new Interceptor() {
+                    @NotNull
+                    @Override
+                    public okhttp3.Response intercept(@NotNull Chain chain) throws IOException {
+                        Request originalRequest = chain.request();
+
+                        Request newRequest = originalRequest.newBuilder()
+                                .header("Interceptor-Header", "xyz")
+                                .build();
+                        return chain.proceed(newRequest);
+                    }
+                })
+                .addInterceptor(loggingInterceptor)
+                .build();
+
         Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl("http://jsonplaceholder.typicode.com/") // always end with "/"
-                .addConverterFactory(GsonConverterFactory.create())
+                .baseUrl("https://jsonplaceholder.typicode.com/") // always end with "/"
+                .addConverterFactory(GsonConverterFactory.create()) // eventually pass gson as parameter to serialize nulls
+                .client(okHttpClient)
                 .build();
 
         jsonPlaceHolderApi = retrofit.create((JsonPlaceHolderApi.class));
 
-        //getPosts();
-        getComments();
+        getPosts();
+        //getComments();
+        //createPost();
+        //updatePost();
 
+        //deletePost();
     }
 
     private void getPosts() {
@@ -91,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
 
                 List<Comment> comments = response.body();
 
-                for (Comment comment:comments) {
+                for (Comment comment : comments) {
                     String content = "";
                     content += "ID: " + comment.getId() + "\n";
                     content += "Post ID: " + comment.getPostId() + "\n";
@@ -110,4 +148,98 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+    private void createPost() {
+        Post post = new Post(23, "new Title", "New Text");
+
+        Map<String, String> fields = new HashMap<>();
+        fields.put("userId", "25");
+        fields.put("title", "New title");
+
+        Call<Post> call = jsonPlaceHolderApi.createPost(fields);
+
+        call.enqueue(new Callback<Post>() {
+            @Override
+            public void onResponse(Call<Post> call, Response<Post> response) {
+
+                if (!response.isSuccessful()) {
+                    textViewResult.setText("Code: " + response.code());
+                    return;
+                }
+
+                Post postResponse = response.body();
+
+                String content = "";
+                content += "Code: " + response.code() + "\n";
+                content += "ID: " + postResponse.getId() + "\n";
+                content += "User ID: " + postResponse.getUserId() + "\n";
+                content += "Title: " + postResponse.getTitle() + "\n";
+                content += "Text: " + postResponse.getText() + "\n\n";
+
+                textViewResult.setText(content);
+            }
+
+            @Override
+            public void onFailure(Call<Post> call, Throwable t) {
+                textViewResult.setText(t.getMessage());
+            }
+        });
+
+    }
+
+    private void updatePost() {
+        Post post = new Post(12, null, "New Text");
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Map-header1", "def");
+        headers.put("Map-header2", "ghi");
+
+        Call<Post> call = jsonPlaceHolderApi.patchPost(headers , 5, post);
+
+        call.enqueue(new Callback<Post>() {
+            @Override
+            public void onResponse(Call<Post> call, Response<Post> response) {
+                if (!response.isSuccessful()) {
+                    textViewResult.setText("Code: " + response.code());
+                    return;
+                }
+
+                Post postResponse = response.body();
+
+                String content = "";
+                content += "Code: " + response.code() + "\n";
+                content += "ID: " + postResponse.getId() + "\n";
+                content += "User ID: " + postResponse.getUserId() + "\n";
+                content += "Title: " + postResponse.getTitle() + "\n";
+                content += "Text: " + postResponse.getText() + "\n\n";
+
+                textViewResult.setText(content);
+
+            }
+
+            @Override
+            public void onFailure(Call<Post> call, Throwable t) {
+                textViewResult.setText(t.getMessage());
+
+            }
+        });
+    }
+
+    private void deletePost() {
+
+        Call<Void> call = jsonPlaceHolderApi.deletePost(5);
+
+        call.enqueue(new Callback<Void>() {
+            @Override
+            public void onResponse(Call<Void> call, Response<Void> response) {
+                textViewResult.setText("Code: " + response.code());
+            }
+
+            @Override
+            public void onFailure(Call<Void> call, Throwable t) {
+                textViewResult.setText(t.getMessage());
+            }
+        });
+    }
+
 }
